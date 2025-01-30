@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 import os.path
-
-from Deadline.Plugins import *
 from pathlib import Path
 from csv import reader
+from subprocess import run
+
+from Deadline.Plugins import *
 
 import pysbs
 
 from System.Diagnostics import *
 
+
+# from Deadline.Scripting import StringUtils
 
 def GetDeadlinePlugin():
     """This is the function that Deadline calls to get an instance of the
@@ -22,6 +25,10 @@ def CleanupDeadlinePlugin(deadlinePlugin):
     longer in use so that it can get cleaned up.
     """
     deadlinePlugin.Cleanup()
+
+
+def Quote(s: str):
+    return f"\"{s}\""
 
 
 class SbsRenderPlugin(DeadlinePlugin):
@@ -45,7 +52,7 @@ class SbsRenderPlugin(DeadlinePlugin):
     def InitializeProcess(self):
         """Called by Deadline to initialize the process."""
         # Set the plugin specific settings.
-        self.SingleFramesOnly = False
+        self.SingleFramesOnly = True
         self.PluginType = PluginType.Simple
 
         # Set the ManagedProcess specific settings.
@@ -56,21 +63,19 @@ class SbsRenderPlugin(DeadlinePlugin):
         self.StdoutHandling = True
 
         # PopupHandling should be enabled if required in your plugin
-        self.PopupHandling = True
+        self.PopupHandling = False
 
         # Set the stdout handlers.
-        self.AddStdoutHandlerCallback(
-            "WARNING:.*").HandleCallback += self.HandleStdoutWarning
-        self.AddStdoutHandlerCallback(
-            "ERROR:(.*)").HandleCallback += self.HandleStdoutError
+        # self.AddStdoutHandlerCallback("WARNING:.*").HandleCallback += self.HandleStdoutWarning
+        # self.AddStdoutHandlerCallback("ERROR:(.*)").HandleCallback += self.HandleStdoutError
 
         # Set the popup ignorers.
-        self.AddPopupIgnorer("Popup 1")
-        self.AddPopupIgnorer("Popup 2")
+        # self.AddPopupIgnorer("Popup 1")
+        # self.AddPopupIgnorer("Popup 2")
 
         # Set the popup handlers.
-        self.AddPopupHandler("Popup 3", "OK")
-        self.AddPopupHandler("Popup 4", "Do not ask me this again;Continue")
+        # self.AddPopupHandler("Popup 3", "OK")
+        # self.AddPopupHandler("Popup 4", "Do not ask me this again;Continue")
 
         self.RenderExecutableCallback += self.HandleRenderExecutable
         self.RenderArgumentCallback += self.RenderArg
@@ -85,19 +90,6 @@ class SbsRenderPlugin(DeadlinePlugin):
 
         return str(sbsrender_exe)
 
-    def RenderArg(self):
-        sbsarFile = self.GetPluginInfoEntry("sbsarFile")
-        csvFile = self.GetPluginInfoEntry("csvFile")
-        startFrame = self.GetStartFrame()
-        if os.path.exists(csvFile):
-            with open(csvFile, "r") as f:
-                csvReader = reader(f)
-                for i, row in enumerate(csvReader):
-                    if i == startFrame:
-                        print(row)
-                        return f"--verbose info {sbsarFile}"  # f"{sbsarFile} {csvFile}"
-        return f"--verbose info {sbsarFile}"
-
     def HandleStdoutWarning(self):
         """Callback for when a line of stdout contains a WARNING message."""
         self.LogWarning(self.GetRegexMatch(0))
@@ -105,3 +97,34 @@ class SbsRenderPlugin(DeadlinePlugin):
     def HandleStdoutError(self):
         """Callback for when a line of stdout contains an ERROR message."""
         self.FailRender("Detected an error: " + self.GetRegexMatch(1))
+
+    def RenderArg(self):
+        sbsrender = self.HandleRenderExecutable()
+
+        sbsarFile = self.GetPluginInfoEntry("input")
+        sbsarFileQ = Quote(sbsarFile)
+
+        csvFile = self.GetPluginInfoEntry("csvFile")
+        csvFileQ = Quote(csvFile)
+
+        startFrame = self.GetStartFrame()
+
+        if not os.path.exists(sbsarFile):
+            self.FailRender(f"SBSAR file not exist: {sbsarFile}")
+            return ""
+
+        if not os.path.exists(csvFile):
+            self.FailRender(f"CSV file not exists: {csvFile}")
+            return f""
+
+        info = run([sbsrender, "--verbose", "info", sbsarFile], capture_output=True)
+        parms = info.stdout
+
+        print(parms)
+
+        with open(csvFile, "r") as f:
+            csvReader = reader(f)
+            for i, row in enumerate(csvReader):
+                if i == startFrame:
+                    print(row)
+        return "-V"
