@@ -102,14 +102,15 @@ class SbsRenderPlugin(DeadlinePlugin):
             self.FailRender(f"CSV file not exists: {csvFile}")
             return f""
 
-        outputsize = ','.join(map(lambda x: str(int(log2(int(x)))), self.GetPluginInfoEntry("outputsize").split(',')))
+        outputsize = ','.join(map(lambda x: str(int(log2(int(x)))),
+                                  self.GetPluginInfoEntryWithDefault("outputsize", "1024,1024").split(',')))
         parms = [
             "render",
             "--input", f"\"{sbsarFile}\"",
             "--input-graph", self.GetPluginInfoEntry("input-graph"),
-            "--output-bit-depth", self.GetPluginInfoEntry("output-bit-depth"),
-            "--output-format", self.GetPluginInfoEntry("output-format"),
-            "--output-name", self.GetPluginInfoEntry("output-name"),
+            "--output-bit-depth", self.GetPluginInfoEntryWithDefault("output-bit-depth", "8"),
+            "--output-format", self.GetPluginInfoEntryWithDefault("output-format", "png"),
+            "--output-name", self.GetPluginInfoEntryWithDefault("output-name", "{inputName}_{inputGraphUrl}_{outputNodeName}"),
             "--set-value", f"$outputsize@{outputsize}",
         ]
 
@@ -131,7 +132,7 @@ class SbsRenderPlugin(DeadlinePlugin):
             seed = randint(0, int(2147483647 / (2 ** 7)))
 
         else:
-            seed = self.GetPluginInfoEntry("randomseed")
+            seed = self.GetPluginInfoEntryWithDefault("randomseed", "0")
 
         rSeed = f"$randomseed@{seed}"
         self.LogInfo(f"Random Seed: {seed}")

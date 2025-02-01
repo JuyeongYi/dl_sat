@@ -276,6 +276,8 @@ def MakeParmCSV():
 
         with open(csvPath, "w") as fp:
             fp.write(f"{parmName}\n{parmType}\n")
+            sampleLow = ',' * (len(parmName) - 1)
+            fp.write(f"{sampleLow}\n")
 
         g_parmCSV.TheValue = str(csvPath)
     except Exception as e:
@@ -290,15 +292,9 @@ def Test():
 def Submit(*args):
     global g_dialog
 
-    sbsarFile = g_dialog.GetValue(INPUT)
-    csvFile = g_dialog.GetValue(PARM_CSV)
-
     job_info = dict()
 
-    inputGraph = g_dialog.GetValue(INPUT_GRAPH)
-
-    job_info["Name"] = inputGraph
-
+    csvFile = g_dialog.GetValue(PARM_CSV)
     if os.path.exists(csvFile):
         with open(csvFile, "r") as f:
             lines = f.readlines()
@@ -312,9 +308,18 @@ def Submit(*args):
                 job_info["Frames"] = f"0-{lineLines - 3}"
     else:
         g_dialog.ShowMessageBox("No CSV File", "Error", ("OK",))
+        return
 
+    sbsarFile = g_dialog.GetValue(INPUT)
     if not os.path.exists(sbsarFile):
         g_dialog.ShowMessageBox("No SBSAR File", "Error", ("OK",))
+        return
+
+    sbsarFilePath = Path(sbsarFile)
+    csvFilePath = Path(csvFile)
+    inputGraph = g_dialog.GetValue(INPUT_GRAPH)
+
+    job_info["Name"] = f"{sbsarFilePath.stem}({inputGraph}) w/ {csvFilePath.stem}"
 
     plugin_info = {"input": sbsarFile,
                    "csvFile": csvFile,
