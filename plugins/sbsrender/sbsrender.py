@@ -151,30 +151,52 @@ class SbsRenderPlugin(DeadlinePlugin):
                     parms.append('--output-path')
                     parms.append(f"\"{d}\"".replace('\\', '/'))
 
-                    failedImage = []
+                    failed = []
+                    parsers = {
+                        "INTEGER": int,
+                        "FLOAT": float,
+                    }
 
                     for h, v, d in zip(header, row, dType):
                         if v != "":
-                            if d.startswith("INTEGER"):
+                            if d.startswith("INTEGER") or d.startswith("FLOAT"):
+                                parser = parsers[d[:-1]]
+
+                                parsed = tuple(map(lambda x: str(parser(x)), v.split('|')))
+                                required = int(d[-1])
+                                put = len(parsed)
+                                if required != put:
+                                    failed.append(f"{h} required {required} value(s), but got {put} value(s).")
+                                    continue
+
                                 parms.append(f"--set-value")
-                                value = ','.join(map(lambda x: str(int(x)), v.split('|')))
+                                value = ','.join(parsed)
                                 parms.append(f"{h}@{value}")
-                                print(f"{h}@{value}")
-                            elif d.startswith(" FLOAT"):
-                                parms.append(f"--set-value")
-                                value = ','.join(map(lambda x: str(float(x)), v.split('|')))
-                                parms.append(f"{h}@{value}")
-                                print(f"{h}@{value}")
+
+                            # elif d.startswith("FLOAT"):
+                            #     parsed = tuple(map(lambda x: str(float(x)), v.split('|')))
+                            #     required = int(d[-1])
+                            #     put = len(parsed)
+                            #     if required != put:
+                            #         failed.append(f"Required {required} values, but got {put} values for {h}")
+                            #         continue
+                            #     parms.append(f"--set-value")
+                            #     value = ','.join(parsed)
+                            #     parms.append(f"{h}@{value}")
+                            #
+                            #     print(f"{h}@{value}")
+
                             elif d.startswith("IMAGE"):
-                                parms.append(f"--set-entry")
                                 if not os.path.exists(v):
-                                    failedImage.append(v)
+                                    failed.append(f"Image not found: {v}")
+                                    continue
+                                parms.append(f"--set-entry")
                                 parms.append(f"{h}@\"{v}\"")
-                                print(f"{h}@{v}")
-                    if failedImage:
-                        for i in failedImage:
+
+                    if failed:
+                        for i in failed:
                             self.LogWarning(f"Image not found: {i}")
-                        self.FailRender(f"More than 1 image not found.")
+                        self.FailRender(f"More than input parsing failed.")
                         return ""
                     break
         return ' '.join(parms)

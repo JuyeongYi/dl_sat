@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set "DEADLINE_DIR=%~1"
+set "DEADLINE_DIR=C:\DeadlineRepository10"
 set "PLUGIN_DIR=%~dp0"
 
 if "%DEADLINE_DIR%"=="" (
@@ -33,14 +33,14 @@ for /d %%D in ("%PLUGIN_DIR%plugins\*") do (
 :: Link script files from direct subfolders only
 for /d %%D in ("%PLUGIN_DIR%scripts\*") do (
     set "FOLDER_NAME=%%~nxD"
-    if not exist "%DEADLINE_DIR%\scripts\!FOLDER_NAME!" (
-        mkdir "%DEADLINE_DIR%\scripts\!FOLDER_NAME!" 2>nul
+    if not exist "%DEADLINE_DIR%\custom\scripts\!FOLDER_NAME!" (
+        mkdir "%DEADLINE_DIR%\custom\scripts\!FOLDER_NAME!" 2>nul
     )
     
     for %%F in ("%%D\*") do (
         set "FILE_NAME=%%~nxF"
-        if not exist "%DEADLINE_DIR%\scripts\!FOLDER_NAME!\!FILE_NAME!" (
-            mklink "%DEADLINE_DIR%\scripts\!FOLDER_NAME!\!FILE_NAME!" "%%F"
+        if not exist "%DEADLINE_DIR%\custom\scripts\!FOLDER_NAME!\!FILE_NAME!" (
+            mklink "%DEADLINE_DIR%\custom\scripts\!FOLDER_NAME!\!FILE_NAME!" "%%F"
         )
     )
 )
