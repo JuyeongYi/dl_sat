@@ -1,16 +1,11 @@
 import os.path
-from csv import excel
-from math import expm1
-
-from Deadline.Scripting import RepositoryUtils
-from DeadlineUI.Controls.Scripting.DeadlineScriptDialog import DeadlineScriptDialog
-
 from functools import partial
+from pathlib import Path
 
-from Deadline.Scripting import RepositoryUtils
-
+# from Deadline.Scripting import RepositoryUtils
+from DeadlineUI.Controls.Scripting.DeadlineScriptDialog import DeadlineScriptDialog
 from SubmitDLJob import SubmitJob
-from sbsrenderInfoParser import GetSBSARInfo, SBSARInfo, GraphInfo
+from sbsrenderInfoParser import GetSBSARInfo
 
 submitter = partial(SubmitJob, "sbsrender")
 
@@ -18,6 +13,8 @@ try:
     from typing import Any
 except ImportError:
     pass
+
+DEBUG = True
 
 # Globals =================================
 g_dialog = DeadlineScriptDialog()
@@ -31,6 +28,8 @@ g_outName = None
 g_presets = None
 g_randomSeed = None
 g_diffEachSeed = None
+g_outputPath = None
+g_parmCSV = None
 
 # params
 ## job
@@ -52,7 +51,6 @@ OUTPUT_FORMAT = "output-format"
 PRESET = "use-preset"
 
 
-# todo : preset 추가
 # =========================================
 def exceptAll(func):
     def wrapper(*args):
@@ -65,9 +63,9 @@ def exceptAll(func):
 
 
 def __main__(*args):
-    global g_input, g_dialog, g_inputGraph, g_usageOn, g_output, g_outBitDepth, g_outName, g_presets, g_randomSeed, g_diffEachSeed
+    global g_input, g_dialog, g_inputGraph, g_usageOn, g_output, g_outBitDepth, g_outName, g_presets, g_randomSeed
+    global g_diffEachSeed, g_outputPath, g_parmCSV
     # Tab Start
-
     g_dialog.AddTabControl("Deadline Job Controls", 0, 0)
 
     # Tab Page(SBS Render Options) Start
@@ -75,49 +73,56 @@ def __main__(*args):
     g_dialog.AddGrid()
     g_dialog.AddControlToGrid("IOSep", "SeparatorControl", "I/O options", r := 0, c := 0, colSpan=5)
 
+    # R1 : SBSAR File, Input Graph
     g_dialog.AddControlToGrid(f"{INPUT}Label", "LabelControl", "SBSAR File", r := r + 1, c := 0, expand=False)
-    g_input = g_dialog.AddSelectionControlToGrid(INPUT, "FileBrowserControl", "",
-                                                 "Substance Archaive File (*.sbsar)",
+    g_input = g_dialog.AddSelectionControlToGrid(INPUT, "FileBrowserControl", "", "Substance Archaive File (*.sbsar)",
                                                  r, c := c + 1, colSpan=2)
-
     g_dialog.AddControlToGrid(f"{INPUT_GRAPH}Label", "LabelControl", "Input Graph", r := r, c := c + 2)
-    g_inputGraph = g_dialog.AddComboControlToGrid(INPUT_GRAPH, "ComboControl", "", ("",), r, c := c + 1,
-                                                  expand=True)
+    g_inputGraph = g_dialog.AddComboControlToGrid(INPUT_GRAPH, "ComboControl", "", ("",), r, c := c + 1, expand=True)
     g_inputGraph.currentTextChanged.connect(OnGraphChanged)
 
+    # R2 : Destination Path
+    g_dialog.AddControlToGrid(f"{OUTPUT_PATH}Label", "LabelControl", "Destination Path", r := r + 1, c := 0,
+                              expand=False)
+    g_outputPath = g_dialog.AddSelectionControlToGrid(OUTPUT_PATH, "FolderBrowserControl", "", "", r, c := c + 1,
+                                                      colSpan=4)
+
+    # R3 : Parm CSV
+    g_dialog.AddControlToGrid(f"{PARM_CSV}Label", "LabelControl", "Parm CSV File", r := r + 1, c := 0, expand=False)
+    g_parmCSV = g_dialog.AddSelectionControlToGrid(PARM_CSV, "FileBrowserControl", "", "Comma Seperated Value (*.csv)",
+                                                   r, c := c + 1, colSpan=4)
+
+    # R4 : Make Parm CSV
+    mkParmCSVBtn = g_dialog.AddControlToGrid("makeParmCSV", "ButtonControl",
+                                             "Make parm CSV for chosen file and graph to destination",
+                                             r := r + 1, c := 1, colSpan=4)
+    mkParmCSVBtn.clicked.connect(MakeParmCSV)
+
+    # R5: Output, Output Based Usage
     g_dialog.AddControlToGrid(f"{OUTPUT}Label", "LabelControl", "Outputs to export", r := r + 1, c := 0)
     g_output = g_dialog.AddControlToGrid(OUTPUT, "TextControl", "", r, c := c + 1, colSpan=3)
-    g_usageOn = g_dialog.AddSelectionControlToGrid("outputBasedUsage", "CheckBoxControl", False,
-                                                   "Output Based Usage",
+    g_usageOn = g_dialog.AddSelectionControlToGrid("outputBasedUsage", "CheckBoxControl", False, "Output Based Usage",
                                                    r := r, c := c + 3)
     g_usageOn.toggled.connect(UsageToggled)
 
-    g_dialog.AddControlToGrid(f"{PARM_CSV}Label", "LabelControl", "Parm CSV File", r := r + 1, c := 0, expand=False)
-    g_dialog.AddSelectionControlToGrid(PARM_CSV, "FileBrowserControl", "", "Comma Seperated Value (*.csv)", r,
-                                       c := c + 1, colSpan=2)
-    g_dialog.AddControlToGrid(f"{PRESET}Label", "LabelControl", "Preset", r, c := c + 2)
-    g_presets = g_dialog.AddComboControlToGrid(PRESET, "ComboControl", "", ("",), r, c := c + 1)
+    # R6 : Preset, Output Bit Depth
+    g_dialog.AddControlToGrid(f"{PRESET}Label", "LabelControl", "Preset", r := r + 1, c := 0)
+    g_presets = g_dialog.AddComboControlToGrid(PRESET, "ComboControl", "", ("",), r, c := c + 1, colSpan=2)
 
-    g_dialog.AddControlToGrid(f"{OUT_DEPTH}Label", "LabelControl", "Output Bit Depth", r := r + 1, c := 0,
-                              expand=False)
+    g_dialog.AddControlToGrid(f"{OUT_DEPTH}Label", "LabelControl", "Output Bit Depth", r := r, c := c + 2, expand=False)
     g_outBitDepth = g_dialog.AddComboControlToGrid(OUT_DEPTH, "ComboControl", "16", ("8", "16", "16f", "32f"), r,
                                                    c := c + 1)
 
-    g_dialog.AddControlToGrid(f"{OUTPUT_PATH}Label", "LabelControl", "Destination Path", r := r + 1, c := 0,
-                              expand=False)
-    g_dialog.AddSelectionControlToGrid(OUTPUT_PATH, "FolderBrowserControl", "", "", r, c := c + 1, colSpan=4)
-
+    # R7 : Output Name, Output Format
     g_dialog.AddControlToGrid(f"{OUTPUT_NAME}Label", "LabelControl", "File Name Pattern", r := r + 1, c := 0,
                               expand=False)
-    g_outName = g_dialog.AddControlToGrid(OUTPUT_NAME, "TextControl", "{inputGraphUrl}_{outputNodeName}", r,
-                                          c := c + 1,
+    g_outName = g_dialog.AddControlToGrid(OUTPUT_NAME, "TextControl", "{inputGraphUrl}_{outputNodeName}", r, c := c + 1,
                                           colSpan=3, expand=True)
     g_dialog.AddComboControlToGrid(OUTPUT_FORMAT, "ComboControl", "png",
                                    ("surface", "dds", "bmp", "jpg", "jif", "jpeg", "jpe", "png", "tga", "targa",
-                                    "tif",
-                                    "tiff", "wap", "wbmp", "wbm", "psd", "psb", "hdr", "exr", "webp"), r,
-                                   c := 4)
+                                    "tif", "tiff", "wap", "wbmp", "wbm", "psd", "psb", "hdr", "exr", "webp"), r, c := 4)
 
+    # R8 : Output Size
     g_dialog.AddControlToGrid("outputsizeLabel", "LabelControl", "Output Size(x, y)", r := r + 1, c := 0,
                               expand=False)
     sizeTuple = tuple([str(2 ** i) for i in range(0, 14)])
@@ -125,6 +130,7 @@ def __main__(*args):
     g_dialog.AddComboControlToGrid("outputsizeX", "ComboControl", "1024", sizeTuple, r, c := c + 1, colSpan=2)
     g_dialog.AddComboControlToGrid("outputsizeY", "ComboControl", "1024", sizeTuple, r, c := c + 2, colSpan=2)
 
+    # R9 : Random Seed
     g_dialog.AddControlToGrid("randomseedLabel", "LabelControl", "Random seed", r := r + 1, c := 0, expand=False)
     g_randomSeed = g_dialog.AddRangeControlToGrid("randomseed", "SliderControl", 0, 0, 2147483647 / (2 ** 7), 0, 1,
                                                   r,
@@ -143,6 +149,16 @@ def __main__(*args):
     g_dialog.AddTabPage("Job Options")
     g_dialog.EndTabPage()
     # Tab Page(Job Options) End
+    if DEBUG:
+        g_dialog.AddTabPage("Debug Mode")
+        g_dialog.AddGrid()
+        printSBSAR = g_dialog.AddControlToGrid("printSBSAR", "ButtonControl", "printSBSAR", r := 0, c := 0)
+        printSBSAR.clicked.connect(lambda x: print(g_sbsarDict))
+
+        printGraph = g_dialog.AddControlToGrid("printGRAPH", "ButtonControl", "printSBSAR", r, c := c + 1)
+        printGraph.clicked.connect(lambda x: print(g_sbsarDict[g_inputGraph.currentText()]))
+        g_dialog.EndGrid()
+        g_dialog.EndTabPage()
 
     g_dialog.EndTabControl()
     # Tab End
@@ -160,7 +176,7 @@ def __main__(*args):
     g_dialog.EndGrid()
     # End grid: Buttons
 
-    g_dialog.ShowDialog()
+    g_dialog.ShowDialog(False)
 
 
 def UsageToggled(toggled):
@@ -171,32 +187,31 @@ def UsageToggled(toggled):
     :return:
     """
     global g_output, g_sbsarDict
-    try:
-        currGraph = g_inputGraph.currentText()
-        if currGraph == "":
-            return
 
-        g_output.clear()
-        assert currGraph in g_sbsarDict, f"{currGraph} not in current SBSAR file."
+    currGraph = g_inputGraph.currentText()
+    if currGraph == "":
+        return
 
-        gDict = g_sbsarDict[currGraph]
+    g_output.clear()
 
-        usageOn = toggled
+    currGraph = g_sbsarDict[currGraph]
+    usageOn = toggled
 
-        if usageOn:  # Usage based output
-            txt = ' '.join(gDict.Usage)
-            g_output.setText(txt)
-            g_outName.setText("{inputGraphUrl}_{outputUsages}")
+    if usageOn:  # Usage based output
+        txt = ' '.join(currGraph.Usage)
+        g_output.setText(txt)
+        try:
+            if currGraph.UsageOverraped:
+                g_outName.setText("{inputGraphUrl}_{outputNodeName}_{outputUsages}")
+            else:
+                g_outName.setText("{inputGraphUrl}_{outputUsages}")
+        except Exception as e:
+            print(e)
 
-        else:  # Name based output
-            txt = ' '.join(gDict.Output)
-            g_output.setText(txt)
-            g_outName.setText("{inputGraphUrl}_{outputNodeName}")
-
-
-
-    except Exception as e:
-        print(e)
+    else:  # Name based output
+        txt = ' '.join([x[0] for x in currGraph.Output])
+        g_output.setText(txt)
+        g_outName.setText("{inputGraphUrl}_{outputNodeName}")
 
 
 def OnGraphChanged(newGraph=""):
@@ -205,43 +220,66 @@ def OnGraphChanged(newGraph=""):
     Internally call UsageToggled to modify output.
     """
     global g_sbsarDict, g_inputGraph, g_output, g_presets
+
     if newGraph == "":
         return
 
     usageOn = g_usageOn.isChecked()
     UsageToggled(usageOn)
 
-    if g_sbsarDict.HasPreset:
-        g_presets.clear()
-        g_presets.addItem("No preset")
-        for p in g_sbsarDict.Preset:
-            g_presets.addItem(p)
-        g_presets.setEnabled(True)
-    else:
-        g_presets.clear()
-        g_presets.addItem("Not available")
-        g_presets.setDisabled(True)
+    currGraph = g_sbsarDict[newGraph]
+    g_presets.clear()
+    try:
+        if currGraph.HasPreset:
+            g_presets.addItem("No preset")
+            g_presets.addItems(currGraph.Preset)
+            g_presets.setEnabled(True)
+        else:
+            g_presets.addItem("Not available")
+            g_presets.setDisabled(True)
+    except Exception as e:
+        print(e)
 
 
 def OnSBSARInputChanged(args):
     global g_sbsarDict, g_inputGraph, g_output
 
     if os.path.exists(args.TheValue):
-        sbsInfo = GetSBSARInfo(args.TheValue)
-        g_sbsarDict = sbsInfo
+        g_sbsarDict = GetSBSARInfo(args.TheValue)
 
     g_inputGraph.clear()
-    for f in dir(g_inputGraph):
-        print(f)
-    return
-    try:
-        g_inputGraph.addItem("Select")
-    except Exception as e:
-        print(e)
+    g_inputGraph.addItems(g_sbsarDict.GraphNames)
+
+    # OnGraphChanged(g_sbsarDict.GraphNames[0])
+
+
+def MakeParmCSV():
+    global g_sbsarDict, g_inputGraph, g_outputPath, g_dialog, g_parmCSV
+    sbsarPath = g_sbsarDict.Path
+    graph = g_inputGraph.currentText()
+    outStr = g_outputPath.TheValue
+    outPath = Path(g_outputPath.TheValue) if outStr != "" else ""
+
+    if not sbsarPath.is_file():
+        g_dialog.ShowMessageBox(f"{sbsarPath} not exists.", "SBSAR Error")
         return
 
-    return
-    OnGraphChanged(g_sbsarDict.GraphNames[0])
+    if outPath == "" or not outPath.is_dir():
+        g_dialog.ShowMessageBox(f"{outPath} is neither exist nor a directory", "Output Path Error")
+        return
+
+    csvPath = outPath.joinpath(f"{sbsarPath.stem}_{graph}.csv")
+    try:
+        graph = g_sbsarDict[graph]
+        parmName = ','.join([x[0] for x in graph.Input if not x[0].startswith("$")])
+        parmType = ','.join([x[1] for x in graph.Input if not x[0].startswith("$")])
+
+        with open(csvPath, "w") as fp:
+            fp.write(f"{parmName}\n{parmType}\n")
+
+        g_parmCSV.TheValue = str(csvPath)
+    except Exception as e:
+        g_dialog.ShowMessageBox(f"Error: {e}", "Error")
 
 
 def Test():
@@ -252,15 +290,26 @@ def Test():
 def Submit(*args):
     global g_dialog
 
-    sbsarFile = g_dialog.GetValue("input")
-    csvFile = g_dialog.GetValue("parmCSVFile")
+    sbsarFile = g_dialog.GetValue(INPUT)
+    csvFile = g_dialog.GetValue(PARM_CSV)
 
     job_info = dict()
-    job_info["Name"] = "SBSAR Render"
+
+    inputGraph = g_dialog.GetValue(INPUT_GRAPH)
+
+    job_info["Name"] = inputGraph
 
     if os.path.exists(csvFile):
         with open(csvFile, "r") as f:
-            job_info["Frames"] = f"1-{len(f.readlines()) - 1}"
+            lines = f.readlines()
+            lineLines = len(lines)
+            if lineLines < 2:
+                g_dialog.ShowMessageBox("CSV File is empty or only headers.", "Error", ("OK",))
+                return
+            elif lineLines == 3:
+                job_info["Frames"] = f"0"
+            else:
+                job_info["Frames"] = f"0-{lineLines - 3}"
     else:
         g_dialog.ShowMessageBox("No CSV File", "Error", ("OK",))
 
@@ -268,7 +317,31 @@ def Submit(*args):
         g_dialog.ShowMessageBox("No SBSAR File", "Error", ("OK",))
 
     plugin_info = {"input": sbsarFile,
-                   "csvFile": csvFile}
+                   "csvFile": csvFile,
+                   INPUT_GRAPH: g_dialog.GetValue(INPUT_GRAPH),
+                   OUT_DEPTH: g_dialog.GetValue(OUT_DEPTH),
+                   OUTPUT: g_dialog.GetValue(OUTPUT),
+                   OUTPUT_PATH: g_dialog.GetValue(OUTPUT_PATH),
+                   OUTPUT_NAME: g_dialog.GetValue(OUTPUT_NAME),
+                   OUTPUT_FORMAT: g_dialog.GetValue(OUTPUT_FORMAT),
+                   "outputBasedUsage": g_dialog.GetValue("outputBasedUsage"),
+                   }
+
+    if g_presets.isEnabled():
+        preset = g_dialog.GetValue(PRESET)
+        if preset != "No preset":
+            plugin_info[PRESET] = preset
+
+    diffEachSeed = g_dialog.GetValue("diffEachSeed")
+
+    if diffEachSeed:
+        plugin_info["diffEachSeed"] = True
+    else:
+        plugin_info["randomseed"] = g_dialog.GetValue("randomseed")
+
+    outputsizeX = g_dialog.GetValue("outputsizeX")
+    outputsizeY = g_dialog.GetValue("outputsizeY")
+    plugin_info["outputsize"] = f"{outputsizeX},{outputsizeY}"
 
     result = submitter(job_info, plugin_info)
     g_dialog.ShowMessageBox(result, "Submission Result", ("OK",))

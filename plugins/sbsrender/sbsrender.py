@@ -2,6 +2,9 @@
 import os.path
 from pathlib import Path
 from csv import reader
+from math import log2
+from sys import maxsize
+from random import randint
 from subprocess import run
 
 from Deadline.Plugins import *
@@ -28,7 +31,7 @@ def CleanupDeadlinePlugin(deadlinePlugin):
 
 
 def Quote(s: str):
-    return f"\"{s}\""
+    return f"\'{s}\'"
 
 
 class SbsRenderPlugin(DeadlinePlugin):
@@ -101,13 +104,11 @@ class SbsRenderPlugin(DeadlinePlugin):
     def RenderArg(self):
         sbsrender = self.HandleRenderExecutable()
 
-        sbsarFile = self.GetPluginInfoEntry("input")
+        sbsarFile = self.GetPluginInfoEntry("input").replace('\\', '/')
         sbsarFileQ = Quote(sbsarFile)
 
         csvFile = self.GetPluginInfoEntry("csvFile")
         csvFileQ = Quote(csvFile)
-
-        startFrame = self.GetStartFrame()
 
         if not os.path.exists(sbsarFile):
             self.FailRender(f"SBSAR file not exist: {sbsarFile}")
@@ -117,14 +118,61 @@ class SbsRenderPlugin(DeadlinePlugin):
             self.FailRender(f"CSV file not exists: {csvFile}")
             return f""
 
-        info = run([sbsrender, "--verbose", "info", sbsarFile], capture_output=True)
-        parms = info.stdout
+        outputsize = ','.join(map(lambda x: str(int(log2(int(x)))), self.GetPluginInfoEntry("outputsize").split(',')))
+        parms = [
+            "render",
+            "--input", f"\"{sbsarFile}\"",
+            "--input-graph", self.GetPluginInfoEntry("input-graph"),
+            "--output-bit-depth", self.GetPluginInfoEntry("output-bit-depth"),
+            "--output-format", self.GetPluginInfoEntry("output-format"),
+            "--output-name", self.GetPluginInfoEntry("output-name"),
+            "--set-value", f"$outputsize@{outputsize}",
+        ]
 
-        print(parms)
+        outputBasedUsage = self.GetPluginInfoEntry("outputBasedUsage") == "True"
+        output = self.GetPluginInfoEntry("output").split(' ')
+        if outputBasedUsage:
+            for o in output:
+                parms.append(f"--input-graph-output-usage")
+                parms.append(o)
+        else:
+            for o in output:
+                parms.append(f"--input-graph-output")
+                parms.append(o)
+
+        parms.append("--set-value")
+        diffEachSeed = self.GetPluginInfoEntryWithDefault("diffEachSeed", "False") == "True"
+        seed = 0
+        if diffEachSeed:
+            seed = randint(0, int(2147483647 / (2 ** 7)))
+
+        else:
+            seed = self.GetPluginInfoEntry("randomseed")
+
+        rSeed = f"$randomseed@{seed}"
+        print(rSeed)
+        parms.append(rSeed)
+
+        # print(parms)
+
+        outputPath = Path(self.GetPluginInfoEntry("output-path"))
 
         with open(csvFile, "r") as f:
             csvReader = reader(f)
+            startFrame = self.GetStartFrame()
+            header = next(csvReader)
+            dType = next(csvReader)
             for i, row in enumerate(csvReader):
                 if i == startFrame:
-                    print(row)
-        return "-V"
+                    d = outputPath.joinpath(f"{i:04}")
+                    d.mkdir(exist_ok=True)
+                    parms.append('--output-path')
+                    parms.append(f"\"{d}\"".replace('\\', '/'))
+
+                    for h, v in zip(header, row):
+                        if v != "":
+                            parms.append(f"--set-value")
+                            parms.append(f"{h}@{v.replace('|', ',')}")
+                            print(f"{h} @ {v.replace('|', ',')}")
+                    break
+        return ' '.join(parms)

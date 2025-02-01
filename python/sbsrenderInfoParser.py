@@ -25,7 +25,7 @@ class GraphInfo:
         outputs = []
         presets = []
         graphusages = set()
-        self.__usageOverride = False
+        self.__usageOverraped = False
 
         for l in lines:
             toks = l.split(' ')
@@ -38,7 +38,7 @@ class GraphInfo:
                 elif lenTok == 3:
                     usages = toks[2].split(',')
                     for u in usages:
-                        self.__usageOverride |= u in graphusages
+                        self.__usageOverraped |= u in graphusages
                         graphusages.add(u)
                     outputs.append((toks[1], usages))
             elif toks[0] == 'PRESET':
@@ -72,6 +72,10 @@ class GraphInfo:
     @property
     def Usage(self):
         return self.__usages
+
+    @property
+    def UsageOverraped(self):
+        return self.__usageOverraped
 
     def __str__(self):
 
@@ -118,7 +122,7 @@ class SBSARInfo(dict):
         return tuple(self.values())
 
     @property
-    def Path(self):
+    def Path(self) -> Path:
         return self.__sbsarPath
 
     def __str__(self):
