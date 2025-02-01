@@ -2,6 +2,8 @@
 
 Deadline plugin for [Substance Automation Took-kit](https://helpx.adobe.com/substance-3d-sat.html).
 
+KR: [한국어](README-kr.md)
+
 # Implementation status
 
 ## Implemented
