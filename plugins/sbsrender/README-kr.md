@@ -76,11 +76,13 @@
 - 벡터 타입의 각 원소는 | 로 구분합니다.
 - 빈 칸은 무시합니다
 - boolean은 INTEGER1로 처리되며, 0은 False, 1은 True입니다.
+- IMAGE 타입은 이미지 파일의 경로를 입력해야 하며, 해당 경로에 이미지 파일이 존재해야 합니다.
+- IMAGE 타입은 빈 값으로 둘 수 없습니다.
 
 ## 예시
 
-| x_amount | y_amount | size     | image1          |
-|----------|----------|----------|-----------------|
-| INTEGER1 | INTEGER1 | FLOAT2   | IMAGE           |
-| 1        | 2        | 0.5\|0.7 | <path to image> |
-|          | 10       |          | <path to image> |
+| x_amount | y_amount | size     | image1        |
+|----------|----------|----------|---------------|
+| INTEGER1 | INTEGER1 | FLOAT2   | IMAGE         |
+| 1        | 2        | 0.5\|0.7 | path to image |
+|          | 10       |          | path to image |

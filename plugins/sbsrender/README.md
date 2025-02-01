@@ -84,11 +84,13 @@ Parameters with default values.
 - Vector type elements are separated by |
 - Empty cells are ignored
 - Boolean is treated as INTEGER1, where 0 is False and 1 is True
+- IMAGE type must be the path to an image file, and the image file must exist at that path.
+- IMAGE type cannot be left empty.
 
 ## Example
 
-| x_amount | y_amount | size     | image1          |
-|----------|----------|----------|-----------------|
-| INTEGER1 | INTEGER1 | FLOAT2   | IMAGE           |
-| 1        | 2        | 0.5\|0.7 | <path to image> |
-|          | 10       |          | <path to image> |
+| x_amount | y_amount | size     | image1        |
+|----------|----------|----------|---------------|
+| INTEGER1 | INTEGER1 | FLOAT2   | IMAGE         |
+| 1        | 2        | 0.5\|0.7 | path to image |
+|          | 10       |          | path to image |
