@@ -34,4 +34,4 @@ KR: [한국어](README-kr.md)
    ![setPythonPath](img/setPythonPath.png)
 8. For usage, refer to the document for each plugin.
 
-- [sbsrender](plugins/sbsrender/README-kr.md)
+- [sbsrender](plugins/sbsrender/README.md)
