@@ -30,7 +30,11 @@ def CleanupDeadlinePlugin(deadlinePlugin):
     deadlinePlugin.Cleanup()
 
 
-def Quote(s: str):
+def DQuote(s: str):
+    return f"\"{s}\""
+
+
+def SQuote(s: str):
     return f"\'{s}\'"
 
 
@@ -63,22 +67,10 @@ class SbsRenderPlugin(DeadlinePlugin):
         self.UseProcessTree = True
 
         # StdoutHandling should be enabled if required in your plugin
-        self.StdoutHandling = True
+        self.StdoutHandling = False
 
         # PopupHandling should be enabled if required in your plugin
         self.PopupHandling = False
-
-        # Set the stdout handlers.
-        # self.AddStdoutHandlerCallback("WARNING:.*").HandleCallback += self.HandleStdoutWarning
-        # self.AddStdoutHandlerCallback("ERROR:(.*)").HandleCallback += self.HandleStdoutError
-
-        # Set the popup ignorers.
-        # self.AddPopupIgnorer("Popup 1")
-        # self.AddPopupIgnorer("Popup 2")
-
-        # Set the popup handlers.
-        # self.AddPopupHandler("Popup 3", "OK")
-        # self.AddPopupHandler("Popup 4", "Do not ask me this again;Continue")
 
         self.RenderExecutableCallback += self.HandleRenderExecutable
         self.RenderArgumentCallback += self.RenderArg
@@ -93,22 +85,14 @@ class SbsRenderPlugin(DeadlinePlugin):
 
         return str(sbsrender_exe)
 
-    def HandleStdoutWarning(self):
-        """Callback for when a line of stdout contains a WARNING message."""
-        self.LogWarning(self.GetRegexMatch(0))
-
-    def HandleStdoutError(self):
-        """Callback for when a line of stdout contains an ERROR message."""
-        self.FailRender("Detected an error: " + self.GetRegexMatch(1))
-
     def RenderArg(self):
         sbsrender = self.HandleRenderExecutable()
 
         sbsarFile = self.GetPluginInfoEntry("input").replace('\\', '/')
-        sbsarFileQ = Quote(sbsarFile)
+        sbsarFileQ = SQuote(sbsarFile)
 
         csvFile = self.GetPluginInfoEntry("csvFile")
-        csvFileQ = Quote(csvFile)
+        csvFileQ = SQuote(csvFile)
 
         if not os.path.exists(sbsarFile):
             self.FailRender(f"SBSAR file not exist: {sbsarFile}")
@@ -150,10 +134,8 @@ class SbsRenderPlugin(DeadlinePlugin):
             seed = self.GetPluginInfoEntry("randomseed")
 
         rSeed = f"$randomseed@{seed}"
-        print(rSeed)
+        self.LogInfo(f"Random Seed: {seed}")
         parms.append(rSeed)
-
-        # print(parms)
 
         outputPath = Path(self.GetPluginInfoEntry("output-path"))
 
@@ -169,10 +151,30 @@ class SbsRenderPlugin(DeadlinePlugin):
                     parms.append('--output-path')
                     parms.append(f"\"{d}\"".replace('\\', '/'))
 
-                    for h, v in zip(header, row):
+                    failedImage = []
+
+                    for h, v, d in zip(header, row, dType):
                         if v != "":
-                            parms.append(f"--set-value")
-                            parms.append(f"{h}@{v.replace('|', ',')}")
-                            print(f"{h} @ {v.replace('|', ',')}")
+                            if d.startswith("INTEGER"):
+                                parms.append(f"--set-value")
+                                value = ','.join(map(lambda x: str(int(x)), v.split('|')))
+                                parms.append(f"{h}@{value}")
+                                print(f"{h}@{value}")
+                            elif d.startswith(" FLOAT"):
+                                parms.append(f"--set-value")
+                                value = ','.join(map(lambda x: str(float(x)), v.split('|')))
+                                parms.append(f"{h}@{value}")
+                                print(f"{h}@{value}")
+                            elif d.startswith("IMAGE"):
+                                parms.append(f"--set-entry")
+                                if not os.path.exists(v):
+                                    failedImage.append(v)
+                                parms.append(f"{h}@\"{v}\"")
+                                print(f"{h}@{v}")
+                    if failedImage:
+                        for i in failedImage:
+                            self.LogWarning(f"Image not found: {i}")
+                        self.FailRender(f"More than 1 image not found.")
+                        return ""
                     break
         return ' '.join(parms)
